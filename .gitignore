@@ -1,4 +1,5 @@
 .pyenv
-domains.json
-domains.txt
-leads.json
+*.json
+*.txt
+*.csv
+lead_finder.py
