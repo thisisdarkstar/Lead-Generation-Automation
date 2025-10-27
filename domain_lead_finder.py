@@ -1,48 +1,29 @@
 #!/usr/bin/env python3
 """
-Domain Lead Finder
-------------------
-This CLI tool finds potential leads for domain sales given a base domain name.
-It discovers all active domains with the *exact same SLD* (e.g. apex.in, apex.world for apex.com)
-using DuckDuckGo and RapidDNS open sources.
+Domain Lead Finder (Module & CLI)
 
-Filters strictly to only direct SLD matches (e.g. "apex" for apex.com).
+Finds potential lead domains sharing the same SLD using DuckDuckGo and RapidDNS.
+Filters strictly for exact SLD matches (no false positives).
+Enrichment: returns domain, URL, category, copyright, status, company_name, lead_type.
 
-Outputs results as JSON or CSV, with fields for domain, full URL, category, copyright, status,
-lead type, and more.
-
----------------------------------------
-DEPENDENCIES:
+Dependencies:
     pip install termcolor requests tldextract beautifulsoup4 ddgs
 
-USAGE EXAMPLES:
+Usage as CLI:
     python domain_lead_finder.py -d apex.com --debug --output results.json
     python domain_lead_finder.py -l domains.txt --output results.csv
 
-OUTPUT FORMAT:
-    JSON (by default) or CSV.
-    Each entry includes:
-        - domain: the discovered domain (e.g. apex.in)
-        - url: full http URL
-        - category: classified from website keywords
-        - copyright year: extracted
-        - status: active/inactive
-        - company_name: (N/A)
-        - lead_type: 'High', 'Medium', 'Low' - based on TLD relevance
-
----------------------------------------
-SCRIPT BY: Darkstar
----------------------------------------
+As a module:
+    from domain_lead_finder import find_leads_for_domains
+    leads_dict = find_leads_for_domains(['apex.com', 'ishaatech.ai'], debug=False)
 """
 
-import argparse
 import re
 import requests
 import socket
 import json
 import csv
 import sys
-from urllib.parse import urlparse
 from tldextract import extract
 from bs4 import BeautifulSoup
 from termcolor import colored
@@ -63,28 +44,33 @@ def log(message, level="INFO"):
 
 
 def normalize_sld(domain):
-    """Extracts the SLD (main name) from a full domain like apex.com -> 'apex'."""
+    """Extracts the SLD (main label) from a full domain like apex.com -> 'apex'."""
     ext = extract(domain)
     return ext.domain.lower()
 
 
 def probe_domain_activity(domain):
-    """Checks if the domain resolves and if HTTP responds for basic domain activity."""
+    """
+    Checks if the domain resolves and if HTTP responds for basic activity.
+    Returns tuple (bool active, status string).
+    """
     try:
         socket.gethostbyname(domain)
         try:
             resp = requests.head(f"http://{domain}", timeout=5)
             return True, resp.status_code
-        except:
-            return True, "No HTTP"
-    except socket.gaierror:
-        return False, "No DNS"
+        except Exception as e:
+            return True, f"No HTTP ({e})"
+    except socket.gaierror as err:
+        return False, f"No DNS ({err})"
+    except Exception as e:
+        return False, f"Probe Error ({e})"
 
 
 def google_tld_search(sld, tld, debug=False):
     """
-    Attempts to search for matching SLD.TLD domains using Google.
-    Will fail gracefully (warn) as CLI requests are often blocked.
+    Attempts automated Google search for SLD.TLD matches (CLI scraping often blocked).
+    Returns list of candidate domains (may often empty).
     """
     import urllib.parse
 
@@ -96,16 +82,12 @@ def google_tld_search(sld, tld, debug=False):
         res = requests.get(search_url, headers=headers, timeout=20)
         if debug:
             log(f"GOOGLE HTML: {res.text[:500]}", "DEBUG")
-        # Google blocks most CLI scraping
         if (
             "enablejs" in res.text
             or "Please click" in res.text
             or "detected unusual traffic" in res.text
         ):
-            log(
-                "Google blocked our automated query. Use DuckDuckGo and RapidDNS results.",
-                "WARN",
-            )
+            log("Google blocked automated query. Use DuckDuckGo and RapidDNS.", "WARN")
             return []
         soup = BeautifulSoup(res.text, "html.parser")
         for a in soup.find_all("a", href=True):
@@ -119,7 +101,6 @@ def google_tld_search(sld, tld, debug=False):
                     "",
                     normd,
                 )
-                # SLD must match exactly
                 if (
                     normd_clean == sld
                     and extd.suffix
@@ -133,8 +114,8 @@ def google_tld_search(sld, tld, debug=False):
 
 def duckduckgo_tld_search(sld, tld, debug=False):
     """
-    Searches DuckDuckGo for domains with given SLD.TLD.
-    This is the main source for CLI usage (via ddgs .text()).
+    Uses DuckDuckGo for SLD.TLD matches; primary engine for CLI usage.
+    Returns a list of domains discovered.
     """
     try:
         from ddgs import DDGS
@@ -155,7 +136,6 @@ def duckduckgo_tld_search(sld, tld, debug=False):
                         "",
                         normd,
                     )
-                    # SLD must match exactly
                     if (
                         normd_clean == sld
                         and extd.suffix
@@ -172,6 +152,7 @@ def duckduckgo_tld_search(sld, tld, debug=False):
 def rapid_dns_lookup(sld, debug=False):
     """
     Uses RapidDNS to get all domains for a given SLD across all TLDs.
+    Returns a list of all candidate domains.
     """
     url = f"https://rapiddns.io/same/{sld}?full=1"
     domains = set()
@@ -182,7 +163,6 @@ def rapid_dns_lookup(sld, debug=False):
             dom = tag.text.strip()
             extd = extract(dom)
             normd = extd.domain.lower()
-            # SLD must match exactly
             if normd == sld and f"{normd}.{extd.suffix}" != f"{sld}.com":
                 domains.add(f"{normd}.{extd.suffix}")
         if debug:
@@ -194,7 +174,8 @@ def rapid_dns_lookup(sld, debug=False):
 
 def get_category_and_copyright(domain):
     """
-    Attempts to extract business category and copyright year from content.
+    Extracts simple category and copyright year from website's public HTML.
+    Returns (category, copyright year).
     """
     category, year = "Unknown", "N/A"
     try:
@@ -221,7 +202,7 @@ def get_category_and_copyright(domain):
 
 
 def classify_lead(domain):
-    """Classifies lead type by TLD."""
+    """Classifies lead type by TLD: returns 'High', 'Medium', or 'Low'."""
     suffix = extract(domain).suffix
     high = ["one", "world", "group", "online", "global"]
     medium = ["in", "net", "co", "ai", "biz"]
@@ -233,69 +214,93 @@ def classify_lead(domain):
         return "Low"
 
 
-def process_domain(domain, debug=False):
+def find_leads_for_domains(domains, debug=False):
     """
-    Main workflow:
-        - Extract SLD.
-        - Discover candidate domains via DuckDuckGo, Google (warn), RapidDNS.
-        - Filter strictly to candidates with matching SLD only.
-        - Probe activity; extract enrichment data; write output.
+    Main API function. Finds all leads for a list of domains.
+
+    Args:
+        domains (list[str]): Domains to search.
+        debug (bool): Enable debug logging.
+
+    Returns:
+        dict: Dictionary mapping each source domain to its list of lead dicts.
+        Also returns errors as a dict if any failures.
+    """
+    all_data = {}
+    errors = {}
+    for i, domain in enumerate(domains, start=1):
+        try:
+            log(f"Processing domain {i}/{len(domains)}: {domain}", "PROCESS")
+            all_data.update(_process_domain(domain, debug))
+        except Exception as exc:
+            log(f"Fatal error with {domain}: {exc}", "ERROR")
+            errors[domain] = str(exc)
+    return {"data": all_data, "errors": errors} if errors else all_data
+
+
+def _process_domain(domain, debug=False):
+    """
+    Internal workflow for a single domain. Used by both CLI and API.
+    Returns dict: { domain: [leads...] }
     """
     sld = normalize_sld(domain)
     log(f"Starting lead search for SLD: '{sld}'", "START")
 
     tlds = ["co", "in", "net", "group", "online", "world", "ai", "biz", "org", "app"]
-    google_results = []
-    duck_results = []
+    google_results, duck_results = [], []
     for tld in tlds:
-        g_results = google_tld_search(sld, tld, debug=debug)
-        if debug:
-            log(f"Google .{tld}: {g_results}", "DEBUG")
-        google_results.extend(g_results)
-        d_results = duckduckgo_tld_search(sld, tld, debug=debug)
-        if debug:
-            log(f"DuckDuckGo .{tld}: {d_results}", "DEBUG")
-        duck_results.extend(d_results)
-    rapid_dns = rapid_dns_lookup(sld, debug=debug)
+        try:
+            google_results.extend(google_tld_search(sld, tld, debug=debug))
+        except Exception as e:
+            log(f"Google search for tld .{tld} failed: {e}", "WARN")
+        try:
+            duck_results.extend(duckduckgo_tld_search(sld, tld, debug=debug))
+        except Exception as e:
+            log(f"DuckDuckGo search for tld .{tld} failed: {e}", "WARN")
+    try:
+        rapid_dns = rapid_dns_lookup(sld, debug=debug)
+    except Exception as e:
+        log(f"RapidDNS failed: {e}", "WARN")
+        rapid_dns = []
     combined_domains = list(set(google_results + duck_results + rapid_dns))
     if debug:
         log(f"Total unique domains found: {len(combined_domains)}", "DEBUG")
 
     leads = []
     for d in combined_domains:
-        # Filter for exact match only: SLD must match the original input SLD
-        extd = extract(d)
-        if extd.domain.lower() != sld:
-            continue
-        if d == domain:
-            continue
-        active, status_detail = probe_domain_activity(d)
-        if not active:
+        try:
+            extd = extract(d)
+            if extd.domain.lower() != sld or d == domain:
+                continue
+            active, status_detail = probe_domain_activity(d)
+            if not active:
+                if debug:
+                    log(f"Skipping inactive {d} ({status_detail})", "DEBUG")
+                continue
+            log(f"Probing {d} -- active [{status_detail}]", "INFO")
+            category, year = get_category_and_copyright(d)
+            leads.append(
+                {
+                    "domain": d,
+                    "url": f"http://{d}",
+                    "category": category,
+                    "copyright year": year,
+                    "status": "active",
+                    "company_name": "N/A",
+                    "lead_type": classify_lead(d),
+                }
+            )
             if debug:
-                log(f"Skipping inactive {d} ({status_detail})", "DEBUG")
-            continue
-        log(f"Probing {d} -- active [{status_detail}]", "INFO")
-        category, year = get_category_and_copyright(d)
-        leads.append(
-            {
-                "domain": d,
-                "url": f"http://{d}",
-                "category": category,
-                "copyright year": year,
-                "status": "active",
-                "company_name": "N/A",
-                "lead_type": classify_lead(d),
-            }
-        )
-        if debug:
-            log(f"Discovered: {d} ({category}, {year})", "DEBUG")
+                log(f"Discovered: {d} ({category}, {year})", "DEBUG")
+        except Exception as e:
+            log(f"Failed processing {d}: {e}", "WARN")
     return {domain: leads}
 
 
-def main():
-    """
-    CLI entry point. Handles args, orchestrates domain analysis, writes results.
-    """
+# CLI entry point
+if __name__ == "__main__":
+    import argparse
+
     parser = argparse.ArgumentParser(
         description="Domain Lead Finder -- Finds all active domains with same SLD"
     )
@@ -315,48 +320,62 @@ def main():
     if args.d:
         domains.append(args.d)
     if args.file:
-        with open(args.file) as f:
-            domains.extend([line.strip() for line in f if line.strip()])
+        try:
+            with open(args.file) as f:
+                domains.extend([line.strip() for line in f if line.strip()])
+        except Exception as e:
+            log(f"Error reading domain list: {e}", "ERROR")
+            sys.exit(2)
 
-    all_data = {}
-    for i, domain in enumerate(domains, start=1):
-        log(f"Processing domain {i}/{len(domains)}: {domain}", "PROCESS")
-        all_data.update(process_domain(domain, args.debug))
-
-    if args.output:
-        if args.output.endswith(".json"):
-            json.dump(all_data, open(args.output, "w"), indent=2)
-        elif args.output.endswith(".csv"):
-            with open(args.output, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(
-                    [
-                        "source_domain",
-                        "domain",
-                        "url",
-                        "category",
-                        "copyright",
-                        "status",
-                        "lead_type",
-                    ]
-                )
-                for source, leads in all_data.items():
-                    for l in leads:
+    try:
+        results = find_leads_for_domains(domains, debug=args.debug)
+        out_data = (
+            results["data"]
+            if isinstance(results, dict) and "data" in results
+            else results
+        )
+        # Write output file, handling errors.
+        if args.output:
+            try:
+                if args.output.endswith(".json"):
+                    with open(args.output, "w") as fh:
+                        json.dump(results, fh, indent=2)
+                elif args.output.endswith(".csv"):
+                    with open(args.output, "w", newline="") as f:
+                        writer = csv.writer(f)
                         writer.writerow(
                             [
-                                source,
-                                l["domain"],
-                                l["url"],
-                                l["category"],
-                                l["copyright year"],
-                                l["status"],
-                                l["lead_type"],
+                                "source_domain",
+                                "domain",
+                                "url",
+                                "category",
+                                "copyright",
+                                "status",
+                                "lead_type",
                             ]
                         )
-        log(f"Results saved to {args.output}", "DONE")
-    else:
-        print(json.dumps(all_data, indent=2))
-
-
-if __name__ == "__main__":
-    main()
+                        for source, leads in out_data.items():
+                            for l in leads:
+                                writer.writerow(
+                                    [
+                                        source,
+                                        l["domain"],
+                                        l["url"],
+                                        l["category"],
+                                        l["copyright year"],
+                                        l["status"],
+                                        l["lead_type"],
+                                    ]
+                                )
+                log(f"Results saved to {args.output}", "DONE")
+            except Exception as e:
+                log(f"Failed to write output file: {e}", "ERROR")
+                sys.exit(4)
+        else:
+            print(json.dumps(results, indent=2))
+    except KeyboardInterrupt:
+        log("Aborted by user.", "ERROR")
+        sys.exit(130)
+    except Exception as exc:
+        log(f"Fatal (main): {exc}", "ERROR")
+        sys.exit(5)
