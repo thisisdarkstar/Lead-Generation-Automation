@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-extract_domains
+extract_domains_json
 
 Module for extracting domain entries and values from a JSON file, with colored output.
 
@@ -10,10 +10,10 @@ Features:
     - Supports extracting specific key values from domain entry dicts
 
 Usage as CLI:
-    python extract_domains.py -i data.json -d single.domain
-    python extract_domains.py -i data.json -l domain1,domain2
-    python extract_domains.py -i data.json -f domains.txt
-    python extract_domains.py -i data.json -d single.domain -k keyname
+    python extract_domains_json.py -i data.json -d single.domain
+    python extract_domains_json.py -i data.json -l domain1,domain2
+    python extract_domains_json.py -i data.json -f domains.txt
+    python extract_domains_json.py -i data.json -d single.domain -k keyname
 
 Module Functions:
     print_colored_dict(domain: str, entrylist: list[dict]) -> None

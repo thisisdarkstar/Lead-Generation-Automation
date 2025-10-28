@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-extract_domains_from_html
+extract_domains_html
 
 Module for extracting domain names from HTML files containing:
 - <div class="MuiStack-root ..."><p class="MuiTypography-body2 ...">domain</p></div>
