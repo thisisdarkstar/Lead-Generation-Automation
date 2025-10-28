@@ -1,1 +1,4 @@
 tmp/
+pyenv/
+modules/.env
+Dockerfile

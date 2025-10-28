@@ -9,7 +9,7 @@ from datetime import datetime
 
 # Import modules
 from modules.extract_domains_api import fetch_domains, extract_unique_domains
-from modules.domain_lead_finder import find_leads_for_domains
+from modules.domain_lead_finder import find_leads
 
 app = FastAPI(
     title="Domain Tools API",
@@ -119,24 +119,17 @@ async def find_lead_for_single(domain: str, debug: bool = False):
     Usage: /api/find-leads?domain=apex.com
     """
     try:
-        results = find_leads_for_domains([domain], debug=debug)
-        leads = (
-            results["data"]
-            if isinstance(results, dict) and "data" in results
-            else results
-        )
+        leads_dict = find_leads([domain])
+        leads = leads_dict.get(domain, [])
         return {
             "success": True,
-            "leads": leads,
-            "count": 1,
+            "leads": leads,  # This is a list of {domain, url}
+            "count": len(leads),
             "domain": domain,
             "message": f"Lead search completed for {domain}",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-
-
-from fastapi import UploadFile, File, Form
 
 
 # 4.2 Find leads for domain.txt file
@@ -155,30 +148,24 @@ async def find_leads_from_file(file: UploadFile = File(...), debug: bool = Form(
         with open(input_path, "r", encoding="utf-8") as f:
             domains = [line.strip() for line in f if line.strip()]
 
-        # Now, safe to delete temp file immediately
         os.remove(input_path)
         input_path = None
 
         if not domains:
             raise HTTPException(status_code=400, detail="No domains found in file.")
 
-        results = find_leads_for_domains(domains, debug=debug)
-        leads = (
-            results["data"]
-            if isinstance(results, dict) and "data" in results
-            else results
-        )
+        leads_dict = find_leads(domains)
+        # leads_dict: { input_domain: [ {domain, url}, ... ], ... }
 
         return {
             "success": True,
-            "leads": leads,
+            "leads": leads_dict,
             "count": len(domains),
             "domains": domains,
             "message": f"Lead search completed for {len(domains)} domains",
         }
 
     except Exception as e:
-        # Always clean up file if exception occurs!
         if input_path and os.path.exists(input_path):
             try:
                 os.remove(input_path)
