@@ -19,16 +19,16 @@ import re
 import requests
 import socket
 import sys
-import time
 import json
 import base64
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from tldextract import extract
 from bs4 import BeautifulSoup
 from termcolor import colored
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+
 
 # -- Load API keys from .env only once on import
 env_file = Path(__file__).parent / ".env"
@@ -71,6 +71,36 @@ def normalize_sld(domain):
     return ext.domain.lower(), ext.suffix.lower()
 
 
+def normalize_for_variation(s):
+    """Normalize domain part by removing hyphens, underscores, dots, spaces, and converting to lowercase."""
+    return re.sub(r"[-_.\s]", "", s.lower())
+
+
+def is_variation(sld_input, sld_candidate):
+    """Returns True if candidate SLD is a variation of input SLD per normalization rules."""
+    norm_input = normalize_for_variation(sld_input)
+    norm_candidate = normalize_for_variation(sld_candidate)
+    return norm_input == norm_candidate
+
+
+def is_parked(content):
+    """Detects common parked/for-sale patterns in HTML content."""
+    parked_patterns = [
+        "buy this domain",
+        "this domain is for sale",
+        "is parked free",
+        "contact owner",
+        "sedo",
+        "afternic",
+        "dan.com",
+        "uniregistry",
+        "this domain may be for sale",
+        "get this domain",
+    ]
+    content = content.lower()
+    return any(pat in content for pat in parked_patterns)
+
+
 def probe_dns(domain):
     """Checks if domain resolves in DNS (True/False)."""
     try:
@@ -79,6 +109,96 @@ def probe_dns(domain):
         return True
     except Exception:
         return False
+
+
+def probe_http(domain):
+    """Checks if HTTP(S) site seems genuinely active, not parked/for sale.
+
+    Fails if the final URL path contains known parking indicators (e.g., /lander)
+    or redirects to a completely different domain known for parking.
+    Also heuristics for suspicious low-content pages.
+    """
+    parking_domains = [
+        "godaddy.com",
+        "secureserver.net",
+        "sedo.com",
+        "afternic.com",
+        "dan.com",
+        "uniregistry.com",
+        "parkingcrew.net",
+        "parkingpanel.com",
+        "trafficz.com",
+        "dynadot.com",
+        "domainsherpa.com",
+    ]
+    parking_paths_substrings = [
+        "/lander",
+        "/parkingpage",
+        "/parked",
+        "/forsale",
+        "/default.aspx",
+        "/domain-for-sale",
+    ]
+
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        session = requests.Session()
+        for proto in ["http", "https"]:
+            try:
+                resp = session.get(
+                    f"{proto}://{domain}",
+                    timeout=6,
+                    headers=headers,
+                    allow_redirects=True,
+                )
+                if resp.status_code >= 400:
+                    continue
+
+                # Check redirect chain URLs thoroughly
+                urls_to_check = [r.url.lower() for r in resp.history] + [
+                    resp.url.lower()
+                ]
+                for url in urls_to_check:
+                    parsed = urlparse(url)
+                    netloc = parsed.netloc
+                    path = parsed.path.lower()
+                    query = parsed.query.lower()
+
+                    # Check if redirect is to known parked domain
+                    if any(pd in netloc for pd in parking_domains):
+                        return False
+                    # Check if URL contains known parking path substrings anywhere
+                    if any(pp in path for pp in parking_paths_substrings):
+                        return False
+                    # Sometimes query strings reveal parking referrals
+                    if any(pp in query for pp in parking_paths_substrings):
+                        return False
+
+                # Check if final domain differs and is parked
+                final_domain = urlparse(resp.url).netloc.lower()
+                if final_domain != domain.lower() and any(
+                    pd in final_domain for pd in parking_domains
+                ):
+                    return False
+
+                # Content length heuristic, exclude very short pages (e.g. < 500 chars)
+                if len(resp.text.strip()) < 500:
+                    # Sometimes legitimate sites have short content but this filters many parking pages
+                    # Can be adjusted/refined if false rejects occur
+                    return False
+
+                # Content-based parked phrases
+                if is_parked(resp.text):
+                    return False
+
+                return True
+
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return False
 
 
 def google_tld_search(sld, tld):
@@ -271,7 +391,7 @@ def find_leads(domains):
     """
     Main routine: For a list of input domains, returns dictionary:
     { "input.com": [ { "domain": "other.net", "url": "http://other.net" }, ... ] }
-    Only outputs DNS-resolving (active) domains.
+    Only outputs domains confirmed active by DNS and HTTP content check.
     """
     result = {}
     for dom in domains:
@@ -280,13 +400,14 @@ def find_leads(domains):
         found = []
         for d in all_tld_domains(sld, exclude=orig_tld):
             extd = extract(d)
-            if extd.domain != sld or d == dom:
+            # Use fuzzy matching for variations on sld
+            if not is_variation(sld, extd.domain) or d == dom:
                 continue
-            if probe_dns(d):
+            if probe_dns(d) and probe_http(d):
                 found.append({"domain": d, "url": f"http://{d}"})
                 log(f"{d:30} [ACTIVE]", "INFO")
             else:
-                log(f"{d:30} [INACTIVE]", "WARN")
+                log(f"{d:30} [INACTIVE or PARKED]", "WARN")
         result[dom] = found
     return result
 
