@@ -1,3 +1,4 @@
+import { downloadAsJson } from "@/utils/fileSaver";
 import React, { useRef, useState, useEffect } from "react";
 
 const API_BASE = "http://localhost:8000/api/find-leads";
@@ -125,13 +126,7 @@ export default function LeadGenerator() {
 
     const handleDownloadJSON = () => {
         if (!result) return;
-        const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "lead_results.json";
-        a.click();
-        URL.revokeObjectURL(url);
+        downloadAsJson(result.leads, "leads_results.json")
     };
 
     const handleClearResult = () => setResult(null);

@@ -1,4 +1,5 @@
 import parseCSV from "@/utils/csvUtils";
+import { downloadAsTxt } from "@/utils/fileSaver";
 import React, { useEffect, useState } from "react";
 
 const LOCAL_STORAGE_KEY = "domainUploaderDomains";
@@ -59,13 +60,8 @@ export default function DomainUploader({ onExtracted }) {
   };
 
   const handleDownload = () => {
-    const blob = new Blob([domains.join("\n")], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "domains.txt";
-    a.click();
-    URL.revokeObjectURL(url);
+    if (!domains.length) return;
+    downloadAsTxt(domains.join('\n'), "domains.txt");
   };
 
   const handleCopy = async () => {

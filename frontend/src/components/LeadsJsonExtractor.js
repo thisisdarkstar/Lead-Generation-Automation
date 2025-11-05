@@ -1,3 +1,4 @@
+import { downloadAsTxt } from "@/utils/fileSaver";
 import extractFromLeads from "@/utils/jsonUtils";
 import React, { useEffect, useState, useRef } from "react";
 
@@ -139,13 +140,7 @@ export default function LeadsJsonExtractor() {
 
     const handleDownload = () => {
         if (!result) return;
-        const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "extracted_leads.json";
-        a.click();
-        URL.revokeObjectURL(url);
+        downloadAsTxt(result, "extracted_leads.json");
     };
 
     const handleCopy = async () => {

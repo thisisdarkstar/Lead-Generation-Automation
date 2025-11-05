@@ -1,3 +1,4 @@
+import { downloadAsTxt } from "@/utils/fileSaver";
 import extractDomainsFromHtml from "@/utils/htmlUtils";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -61,13 +62,8 @@ export default function HtmlDomainExtractor({ onExtracted }) {
     };
 
     const handleDownload = () => {
-        const blob = new Blob([domains.join("\n")], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "domains.txt";
-        a.click();
-        URL.revokeObjectURL(url);
+        if (!domains.length) return;
+        downloadAsTxt(domains.join('\n'), "domains.txt");
     };
 
     const handleCopy = async () => {

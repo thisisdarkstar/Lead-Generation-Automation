@@ -1,8 +1,8 @@
 "use client"
 import React, { useState } from "react";
-import DomainUploader from "../components/DomainUploader";
-import LeadsJsonExtractor from "../components/LeadsJsonExtractor";
-import HtmlDomainExtractor from "../components/HtmlDomainExtractor";
+import DomainUploader from "@/components/DomainUploader";
+import LeadsJsonExtractor from "@/components/LeadsJsonExtractor";
+import HtmlDomainExtractor from "@/components/HtmlDomainExtractor";
 import LeadGenerator from "@/components/LeadGeneration";
 
 // Add more as you modularize!
@@ -11,7 +11,7 @@ const TABS = [
   { id: "csv", label: "CSV to Domains" },
   { id: "leads", label: "Extract From JSON" },
   { id: "html", label: "Extract From HTML" },
-  { id: "lead_gen", label: "Lead Generation (unstable)" }
+  { id: "lead_gen", label: "Lead Generation (slow)" }
 ];
 
 export default function Home() {
@@ -40,19 +40,20 @@ export default function Home() {
         ))}
       </nav>
       <section>
-        {tab === "csv" && (
+        <div style={{ display: tab === "csv" ? "block" : "none" }}>
           <DomainUploader onExtracted={d => setDomains(d)} />
-        )}
-        {tab === "leads" && (
+        </div>
+        <div style={{ display: tab === "leads" ? "block" : "none" }}>
           <LeadsJsonExtractor initialDomains={domains} />
-        )}
-        {tab === "html" && (
+        </div>
+        <div style={{ display: tab === "html" ? "block" : "none" }}>
           <HtmlDomainExtractor onExtracted={d => setDomains(d)} />
-        )}
-        {tab === "lead_gen" && (
+        </div>
+        <div style={{ display: tab === "lead_gen" ? "block" : "none" }}>
           <LeadGenerator />
-        )}
+        </div>
       </section>
+
     </main>
   );
 }
