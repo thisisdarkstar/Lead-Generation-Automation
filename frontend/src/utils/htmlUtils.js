@@ -1,3 +1,4 @@
+// extracts all the domains from raw html as long as they are under a classname "MuiStack-root"
 export default function extractDomainsFromHtml(html) {
     const domainPattern = /(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/;
     const parser = new DOMParser();

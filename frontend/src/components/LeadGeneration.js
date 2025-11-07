@@ -179,7 +179,7 @@ export default function LeadGenerator() {
             {mode === "paste" && (
                 <div className="mb-6">
                     <label className="block text-base font-medium mb-2">
-                        Paste Domains (one per line)
+                        Paste Domains <span className="font-normal text-gray-400">({domains.length})</span>
                     </label>
                     <textarea
                         rows={7}

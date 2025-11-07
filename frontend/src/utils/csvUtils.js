@@ -1,3 +1,4 @@
+// extracts only domain header values from csv file
 export default function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (!lines.length) return [];

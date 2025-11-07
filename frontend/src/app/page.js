@@ -4,6 +4,7 @@ import DomainUploader from "@/components/DomainUploader";
 import LeadsJsonExtractor from "@/components/LeadsJsonExtractor";
 import HtmlDomainExtractor from "@/components/HtmlDomainExtractor";
 import LeadGenerator from "@/components/LeadGeneration";
+import FetchAllocations from "@/components/FetchAllocations";
 
 // Add more as you modularize!
 
@@ -11,7 +12,8 @@ const TABS = [
   { id: "csv", label: "CSV to Domains" },
   { id: "leads", label: "Extract From JSON" },
   { id: "html", label: "Extract From HTML" },
-  { id: "lead_gen", label: "Lead Generation (slow)" }
+  { id: "lead_gen", label: "Lead Generation (slow)" },
+  { id: "fetch_alloc", label: "Fetch Allocations" }
 ];
 
 export default function Home() {
@@ -21,8 +23,8 @@ export default function Home() {
   const [domains, setDomains] = useState([]);
 
   return (
-    <main style={{ maxWidth: 820, margin: "auto", padding: 24 }}>
-      <nav style={{ marginBottom: 24, display: "flex", gap: 20 }}>
+    <main className="m-auto p-6">
+      <nav className="mb-4 flex gap-4 items-center justify-center">
         {TABS.map(t => (
           <button
             key={t.id}
@@ -51,6 +53,9 @@ export default function Home() {
         </div>
         <div style={{ display: tab === "lead_gen" ? "block" : "none" }}>
           <LeadGenerator />
+        </div>
+        <div style={{ display: tab === "fetch_alloc" ? "block" : "none" }}>
+          <FetchAllocations />
         </div>
       </section>
 

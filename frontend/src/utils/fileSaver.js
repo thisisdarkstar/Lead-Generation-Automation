@@ -1,4 +1,6 @@
 // fileSaver.js
+
+// handle downloads when while being downloaded as json file
 export const downloadAsJson = (data, filename = "download.json") => {
     if (!data) return;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -10,6 +12,7 @@ export const downloadAsJson = (data, filename = "download.json") => {
     URL.revokeObjectURL(url);
 };
 
+// handle downloads when while being downloaded as txt file
 export const downloadAsTxt = (text, filename = "download.txt") => {
     if (!text) return;
     const blob = new Blob([text], { type: "text/plain" });
