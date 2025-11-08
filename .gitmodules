@@ -1,0 +1,6 @@
+[submodule "Lead-Generation-Automation-Frontend"]
+	path = Lead-Generation-Automation-Frontend
+	url = https://github.com/thisisdarkstar/Lead-Generation-Automation-Frontend
+[submodule "Lead-Generation-Automation-Backend"]
+	path = Lead-Generation-Automation-Backend
+	url = https://github.com/thisisdarkstar/Lead-Generation-Automation-Backend
