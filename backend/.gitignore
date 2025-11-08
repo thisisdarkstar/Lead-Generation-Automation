@@ -1,6 +1,0 @@
-tmp/
-pyenv/
-modules/.env
-Dockerfile
-__pycache__
-*/__pycache__

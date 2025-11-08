@@ -1,7 +1,0 @@
-.pyenv
-*.json
-*.txt
-*.csv
-test.py
-*.html
-!requirements.txt
